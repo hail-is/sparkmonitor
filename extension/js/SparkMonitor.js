@@ -70,7 +70,7 @@ SparkMonitor.prototype.startCellMonitor = function (cell) {
 		var c = cell;
 		that.cellExecutedAgain(c);
 	})
-	this.cellmonitors[cell.cell_id] = new CellMonitor(this, cell);
+	this.cellmonitors[cell.cell_id] = new CellMonitor(this, cell, this.appName);
 	this.display_mode = "shown";
 	return this.cellmonitors[cell.cell_id];
 }
@@ -209,7 +209,7 @@ SparkMonitor.prototype.onSparkJobStart = function (data) {
 	if (!cellmonitor) {
 		cellmonitor = this.startCellMonitor(cell);
 	}
-	this.data['app' + this.app + 'job' + data.jobId] = {
+	this.data[this.app + '_job_' + data.jobId] = {
 		cell_id: cell.cell_id,
 	}
 	//These values are set here as previous messages may be missed if reconnecting from a browser reload.
@@ -223,7 +223,7 @@ SparkMonitor.prototype.onSparkJobStart = function (data) {
  * @param {Object} data - The data from the spark listener event.
  */
 SparkMonitor.prototype.onSparkJobEnd = function (data) {
-	var cell_id = this.data['app' + this.app + 'job' + data.jobId]['cell_id'];
+	var cell_id = this.data[this.app + '_job_' + data.jobId]['cell_id'];
 	if (cell_id) {
 		console.log('SparkMonitor: Job End at cell: ', cell_id, data);
 		var cellmonitor = this.getCellMonitor(cell_id);
@@ -245,7 +245,7 @@ SparkMonitor.prototype.onSparkStageSubmitted = function (data) {
 		console.error('SparkMonitor: Stage started with no running cell.');
 		return;
 	}
-	this.data['app' + this.app + 'stage' + data.stageId] = {
+	this.data[this.app + '_stage_' + data.stageID] = {
 		cell_id: cell.cell_id,
 	};
 	var cellmonitor = this.getCellMonitor(cell.cell_id);
@@ -258,7 +258,7 @@ SparkMonitor.prototype.onSparkStageSubmitted = function (data) {
  */
 SparkMonitor.prototype.onSparkStageCompleted = function (data) {
 	console.log('SparkMonitor:Stage Completed', data);
-	var cell_id = this.data['app' + this.app + 'stage' + data.stageId]['cell_id'];
+	var cell_id = this.data[this.app + '_stage_' + data.stageID]['cell_id'];
 	if (cell_id) {
 		var cellmonitor = this.cellmonitors[cell_id]
 		if (cellmonitor) cellmonitor.onSparkStageCompleted(data);
@@ -266,32 +266,14 @@ SparkMonitor.prototype.onSparkStageCompleted = function (data) {
 	else console.error('SparkMonitor:ERROR no cellId for completed stage');
 }
 
-/**
- * Called when a Spark task is started. 
- * @param {Object} data - The data from the spark listener event.
- */
-SparkMonitor.prototype.onSparkTaskStart = function (data) {
-	var cell_id = this.data['app' + this.app + 'stage' + data.stageId]['cell_id'];
+
+SparkMonitor.prototype.onSparkStageUpdate = function (data) {
+	var cell_id = this.data[this.app + '_stage_' + data.stageID]['cell_id'];
 	if (cell_id) {
 		var cellmonitor = this.getCellMonitor(cell_id);
-		if (cellmonitor) cellmonitor.onSparkTaskStart(data);
-
+		if (cellmonitor) cellmonitor.onSparkStageUpdate(data);
 	}
 	else console.error('SparkMonitor:ERROR no cellID for task start');
-}
-
-/**
- * Called when a Spark task is ended. 
- * @param {Object} data - The data from the spark listener event.
- */
-SparkMonitor.prototype.onSparkTaskEnd = function (data) {
-	var cell_id = this.data['app' + this.app + 'stage' + data.stageId]['cell_id'];
-	if (cell_id) {
-		var cellmonitor = this.getCellMonitor(cell_id)
-		if (cellmonitor) cellmonitor.onSparkTaskEnd(data);
-
-	}
-	else console.error('SparkMonitor:ERROR no cellID for task end');
 }
 
 /**
@@ -366,12 +348,9 @@ SparkMonitor.prototype.handleMessage = function (msg) {
 			case 'sparkStageCompleted':
 				this.onSparkStageCompleted(data);
 				break;
-			case 'sparkTaskStart':
-				this.onSparkTaskStart(data);
-				break;
-			case 'sparkTaskEnd':
-				this.onSparkTaskEnd(data);
-				break;
+			case 'sparkStageUpdate':
+			    this.onSparkStageUpdate(data);
+			    break;
 			case 'sparkApplicationStart':
 				this.onSparkApplicationStart(data);
 				break;

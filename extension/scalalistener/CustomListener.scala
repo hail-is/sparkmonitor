@@ -105,6 +105,39 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
   @volatile var numExecutors: Int = 0
 
   @volatile var lastUpdatedTimeNS = 0L
+  val stagesChanged = new mutable.ArrayBuffer[((StageId, StageAttemptId), Long)]
+
+  class TaskUpdaterThread() extends Runnable {
+    def run(): Unit = {
+      while (true) {
+        synchronized {
+          val currentTime = System.nanoTime()
+          if (stagesChanged.nonEmpty) {
+            val byStage = stagesChanged.groupBy(_._1).mapValues(_.map(_._2).max).toArray
+
+            byStage.foreach { case ((stageId, stageAttemptId), updateTime) =>
+
+              val data = stageIdToData((stageId, stageAttemptId))
+              val json = ("msgtype" -> "sparkStageUpdate") ~
+                ("updateTime" -> updateTime) ~
+                ("stageId" -> stageId) ~
+                ("numActiveTasks" -> data.numActiveTasks) ~
+                ("numCompletedTasks" -> data.numCompleteTasks)
+
+              send(pretty(render(json)))
+            }
+
+            stagesChanged.clear()
+            lastUpdatedTimeNS = System.nanoTime()
+          }
+        }
+        Thread.sleep(50)
+      }
+    }
+  }
+
+  val t = new Thread(new TaskUpdaterThread())
+  t.start()
 
   /**
    * Called when a spark application starts.
@@ -349,10 +382,6 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     send(pretty(render(json)))
   }
 
-  def notifyTasks(): Unit = synchronized {
-
-  }
-
   /** Called when a task is started. */
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val taskInfo = taskStart.taskInfo
@@ -362,6 +391,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
         new StageUIData
       })
       stageData.numActiveTasks += 1
+      stagesChanged += (((taskStart.stageId, taskStart.stageAttemptId), taskInfo.launchTime))
     }
     var jobjson = ("jobdata" -> "taskstart")
     for (
@@ -370,32 +400,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
         jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveTasks += 1
-      val jobjson = ("jobdata" ->
-        ("jobId" -> jobData.jobId) ~
-          ("numTasks" -> jobData.numTasks) ~
-          ("numActiveTasks" -> jobData.numActiveTasks) ~
-          ("numCompletedTasks" -> jobData.numCompletedTasks) ~
-          ("numSkippedTasks" -> jobData.numSkippedTasks) ~
-          ("numFailedTasks" -> jobData.numFailedTasks) ~
-          ("reasonToNumKilled" -> jobData.reasonToNumKilled) ~
-          ("numActiveStages" -> jobData.numActiveStages) ~
-          ("numSkippedStages" -> jobData.numSkippedStages) ~
-          ("numFailedStages" -> jobData.numFailedStages))
     }
-    val json = ("msgtype" -> "sparkTaskStart") ~
-      ("launchTime" -> taskInfo.launchTime) ~
-      ("taskId" -> taskInfo.taskId) ~
-      ("stageId" -> taskStart.stageId) ~
-      ("stageAttemptId" -> taskStart.stageAttemptId) ~
-      ("index" -> taskInfo.index) ~
-      ("attemptNumber" -> taskInfo.attemptNumber) ~
-      ("executorId" -> taskInfo.executorId) ~
-      ("host" -> taskInfo.host) ~
-      ("status" -> taskInfo.status) ~
-      ("speculative" -> taskInfo.speculative)
-
-    //println("SPARKMONITOR_LISTENER: Task Started: \n"+ pretty(render(json)) + "\n")
-    send(pretty(render(json)))
   }
 
   /** Called when a task is ended. */
@@ -415,6 +420,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
         case org.apache.spark.Success =>
           stageData.completedIndices.add(info.index)
           stageData.numCompleteTasks += 1
+          stagesChanged += (((taskEnd.stageId, taskEnd.stageAttemptId), info.finishTime))
           None
         case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
           stageData.numFailedTasks += 1
@@ -438,96 +444,6 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
         }
       }
     }
-
-    var jsonMetrics: JObject = ("" -> "")
-    val totalExecutionTime = info.finishTime - info.launchTime
-
-    def toProportion(time: Long) = time.toDouble / totalExecutionTime * 100
-
-    var metricsOpt = Option(taskEnd.taskMetrics)
-    val shuffleReadTime = metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
-    val shuffleReadTimeProportion = toProportion(shuffleReadTime)
-    val shuffleWriteTime = (metricsOpt.map(_.shuffleWriteMetrics.writeTime).getOrElse(0L) / 1e6).toLong
-    val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
-    val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
-    val serializationTimeProportion = toProportion(serializationTime)
-    val deserializationTime = metricsOpt.map(_.executorDeserializeTime).getOrElse(0L)
-    val deserializationTimeProportion = toProportion(deserializationTime)
-    val gettingResultTime = if (info.gettingResult) {
-      if (info.finished) {
-        info.finishTime - info.gettingResultTime
-      } else {
-        0L //currentTime - info.gettingResultTime
-      }
-    } else {
-      0L
-    }
-    val gettingResultTimeProportion = toProportion(gettingResultTime)
-    val executorOverhead = serializationTime + deserializationTime
-    val executorRunTime = metricsOpt.map(_.executorRunTime).getOrElse(totalExecutionTime - executorOverhead - gettingResultTime)
-    val schedulerDelay = math.max(0, totalExecutionTime - executorRunTime - executorOverhead - gettingResultTime)
-    val schedulerDelayProportion = toProportion(schedulerDelay)
-    val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
-    val executorComputingTimeProportion =
-      math.max(100 - schedulerDelayProportion - shuffleReadTimeProportion -
-        shuffleWriteTimeProportion - serializationTimeProportion -
-        deserializationTimeProportion - gettingResultTimeProportion, 0)
-
-    val schedulerDelayProportionPos = 0
-    val deserializationTimeProportionPos = schedulerDelayProportionPos + schedulerDelayProportion
-    val shuffleReadTimeProportionPos = deserializationTimeProportionPos + deserializationTimeProportion
-    val executorRuntimeProportionPos = shuffleReadTimeProportionPos + shuffleReadTimeProportion
-    val shuffleWriteTimeProportionPos = executorRuntimeProportionPos + executorComputingTimeProportion
-    val serializationTimeProportionPos = shuffleWriteTimeProportionPos + shuffleWriteTimeProportion
-    val gettingResultTimeProportionPos = serializationTimeProportionPos + serializationTimeProportion
-
-    if (!metricsOpt.isEmpty) {
-      jsonMetrics = ("shuffleReadTime" -> shuffleReadTime) ~
-        ("shuffleWriteTime" -> shuffleWriteTime) ~
-        ("serializationTime" -> serializationTime) ~
-        ("deserializationTime" -> deserializationTime) ~
-        ("gettingResultTime" -> gettingResultTime) ~
-        ("executorComputingTime" -> executorComputingTime) ~
-        ("schedulerDelay" -> schedulerDelay) ~
-        ("shuffleReadTimeProportion" -> shuffleReadTimeProportion) ~
-        ("shuffleWriteTimeProportion" -> shuffleWriteTimeProportion) ~
-        ("serializationTimeProportion" -> serializationTimeProportion) ~
-        ("deserializationTimeProportion" -> deserializationTimeProportion) ~
-        ("gettingResultTimeProportion" -> gettingResultTimeProportion) ~
-        ("executorComputingTimeProportion" -> executorComputingTimeProportion) ~
-        ("schedulerDelayProportion" -> schedulerDelayProportion) ~
-        ("shuffleReadTimeProportionPos" -> shuffleReadTimeProportionPos) ~
-        ("shuffleWriteTimeProportionPos" -> shuffleWriteTimeProportionPos) ~
-        ("serializationTimeProportionPos" -> serializationTimeProportionPos) ~
-        ("deserializationTimeProportionPos" -> deserializationTimeProportionPos) ~
-        ("gettingResultTimeProportionPos" -> gettingResultTimeProportionPos) ~
-        ("executorComputingTimeProportionPos" -> executorRuntimeProportionPos) ~
-        ("schedulerDelayProportionPos" -> schedulerDelayProportionPos) ~
-        ("resultSize" -> metricsOpt.map(_.resultSize).getOrElse(0L)) ~
-        ("jvmGCTime" -> metricsOpt.map(_.jvmGCTime).getOrElse(0L)) ~
-        ("memoryBytesSpilled" -> metricsOpt.map(_.memoryBytesSpilled).getOrElse(0L)) ~
-        ("diskBytesSpilled" -> metricsOpt.map(_.diskBytesSpilled).getOrElse(0L)) ~
-        ("peakExecutionMemory" -> metricsOpt.map(_.peakExecutionMemory).getOrElse(0L)) ~
-        ("test" -> info.gettingResultTime)
-    }
-    val json = ("msgtype" -> "sparkTaskEnd") ~
-      ("launchTime" -> info.launchTime) ~
-      ("finishTime" -> info.finishTime) ~
-      ("taskId" -> info.taskId) ~
-      ("stageId" -> taskEnd.stageId) ~
-      ("taskType" -> taskEnd.taskType) ~
-      ("stageAttemptId" -> taskEnd.stageAttemptId) ~
-      ("index" -> info.index) ~
-      ("attemptNumber" -> info.attemptNumber) ~
-      ("executorId" -> info.executorId) ~
-      ("host" -> info.host) ~
-      ("status" -> info.status) ~
-      ("speculative" -> info.speculative) ~
-      ("errorMessage" -> errorMessage) ~
-      ("metrics" -> jsonMetrics)
-
-    // println("SPARKMONITOR_LISTENER: Task Ended: \n" + pretty(render(json)) + "\n")
-    send(pretty(render(json)))
   }
 
   /** If stored stages data is too large, remove and garbage collect old stages */

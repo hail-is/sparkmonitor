@@ -28,12 +28,13 @@ requirejs(['./taskchart'], function (taskchart) {
  * @param {SparkMonitor} monitor - The parent singleton SparkMonitor instance.
  * @param {CodeCell} cell - The Jupyter CodeCell instance of the cell.
  */
-function CellMonitor(monitor, cell) {
+function CellMonitor(monitor, cell, appName) {
     var that = this;
     window.cm = this;//Debugging from console
 
     this.monitor = monitor; //Parent SparkMonitor instance
     this.cell = cell        //Jupyter Cell instance
+    this.appName = appName  //Spark app name
     this.view = "jobs";     //The current display tab -- "jobs" || "timeline" || "tasks"
     this.lastview = "jobs"; //The previous display tab, used for restoring hidden display
 
@@ -77,6 +78,8 @@ CellMonitor.prototype.createDisplay = function () {
         var element = $(WidgetHTML).hide();
         this.displayElement = element;
         this.cell.element.find('.inner_cell').append(element);
+        element.find('.appname').html(this.appName);
+
         element.slideToggle();
         this.displayVisible = true;
         if (!this.allcompleted) this.badgeInterval = setInterval($.proxy(this.setBadges, this), 1000);
@@ -596,42 +599,19 @@ CellMonitor.prototype.onSparkStageCompleted = function (data) {
     this.stageData[data.stageId]['modified'] = true;
 }
 
-/** Called when a Spark task is started. */
-CellMonitor.prototype.onSparkTaskStart = function (data) {
+/** Called when a Spark stage updates. */
+CellMonitor.prototype.onSparkStageUpdate = function(data) {
     var that = this;
-    this.stageData[data.stageId]['numActiveTasks'] += 1;
-    this.stageData[data.stageId]['firsttaskstart'] = new Date(data.launchTime);
+    this.stageData[data.stageId]['numActiveTasks'] = data.numActiveTasks;
+    this.stageData[data.stageId]['numCompletedTasks'] = data.numCompletedTasks;
     this.stageData[data.stageId]['modified'] = true;
 
     this.stageIdtoJobId[data.stageId].forEach(function (jobId) {
-        that.jobData[jobId]['numActiveTasks'] += 1;
+        that.jobData[jobId]['numActiveTasks'] = data.numActiveTasks;
+        that.jobData[jobId]['numCompletedTasks'] = data.numCompletedTasks;
         that.jobData[jobId]['modified'] = true;
     })
-    if (this.taskchart) this.taskchart.onSparkTaskStart(data);
-}
-
-/** Called when a Spark task is ended. */
-CellMonitor.prototype.onSparkTaskEnd = function (data) {
-    var that = this;
-    this.stageData[data.stageId]['numActiveTasks'] -= 1;
-    this.stageData[data.stageId]['modified'] = true;
-    if (data.status == "SUCCESS") {
-        this.stageData[data.stageId]['numCompletedTasks'] += 1;
-    }
-    else {
-        this.stageData[data.stageId]['numFailedTasks'] += 1;
-    }
-    this.stageIdtoJobId[data.stageId].forEach(function (jobId) {
-        that.jobData[jobId]['numActiveTasks'] -= 1;
-        that.jobData[jobId]['modified'] = true;
-        if (data.status == "SUCCESS") {
-            that.jobData[jobId]['numCompletedTasks'] += 1;
-        }
-        else {
-            that.jobData[jobId]['numFailedTasks'] += 1;
-        }
-    });
-    if (this.taskchart) this.taskchart.onSparkTaskEnd(data);
+    if (this.taskchart) this.taskchart.onSparkStageUpdate(data);
 }
 
 /** Called when an executor is added to spark */

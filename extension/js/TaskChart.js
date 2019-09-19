@@ -263,17 +263,11 @@ TaskChart.prototype.onSparkJobEnd = function (data) {
     this.addJobData(data.jobId, new Date(data.completionTime), "ended");
 }
 
-/** Called when a Spark task is started. */
-TaskChart.prototype.onSparkTaskStart = function (data) {
-    this.addData(data.launchTime, this.numActiveTasks);
-    this.numActiveTasks += 1;
-    this.addData(data.launchTime, this.numActiveTasks);
+/** Called when a Spark stage updates. */
+TaskChart.prototype.onSparkStageUpdate = function(data) {
+    this.addData(data.updateTime, this.numActiveTasks);
+    this.numActiveTasks = data.numActiveTasks;
+    this.addData(data.updateTime, this.numActiveTasks);
 }
 
-/** Called when a Spark task is ended. */
-TaskChart.prototype.onSparkTaskEnd = function (data) {
-    this.addData(data.finishTime, this.numActiveTasks);
-    this.numActiveTasks -= 1;
-    this.addData(data.finishTime, this.numActiveTasks);
-}
 export default TaskChart;
