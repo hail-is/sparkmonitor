@@ -70,7 +70,7 @@ SparkMonitor.prototype.startCellMonitor = function (cell) {
 		var c = cell;
 		that.cellExecutedAgain(c);
 	})
-	this.cellmonitors[cell.cell_id] = new CellMonitor(this, cell, this.appId, this.sparkUiUrl);
+	this.cellmonitors[cell.cell_id] = new CellMonitor(this, cell, this.appName, this.appId, this.sparkUiUrl);
 	this.display_mode = "shown";
 	return this.cellmonitors[cell.cell_id];
 }
@@ -295,6 +295,7 @@ SparkMonitor.prototype.onSparkApplicationStart = function (data) {
 	this.appAttemptId = data.appAttemptId;
 	this.app = this.appId + '_' + this.appAttemptId;
 	this.sparkUiUrl = data.sparkUiUrl;
+	console.log('Spark application start: ', data);
 }
 
 /**

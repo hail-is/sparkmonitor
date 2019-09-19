@@ -28,13 +28,14 @@ requirejs(['./taskchart'], function (taskchart) {
  * @param {SparkMonitor} monitor - The parent singleton SparkMonitor instance.
  * @param {CodeCell} cell - The Jupyter CodeCell instance of the cell.
  */
-function CellMonitor(monitor, cell, appId, sparkUiUrl) {
+function CellMonitor(monitor, cell, appName, appId, sparkUiUrl) {
     var that = this;
     window.cm = this;//Debugging from console
 
     this.monitor = monitor; //Parent SparkMonitor instance
     this.cell = cell;       //Jupyter Cell instance
     this.appId = appId;
+    this.appName = appName;
     this.sparkUiUrl = sparkUiUrl;
     this.view = "jobs";     //The current display tab -- "jobs" || "timeline" || "tasks"
     this.lastview = "jobs"; //The previous display tab, used for restoring hidden display
@@ -79,7 +80,7 @@ CellMonitor.prototype.createDisplay = function () {
         var element = $(WidgetHTML).hide();
         this.displayElement = element;
         this.cell.element.find('.inner_cell').append(element);
-        element.find('.appId').html(this.appId);
+        element.find('.appname').text(this.appName);
 
         element.slideToggle();
         this.displayVisible = true;
