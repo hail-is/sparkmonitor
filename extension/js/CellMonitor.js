@@ -28,13 +28,14 @@ requirejs(['./taskchart'], function (taskchart) {
  * @param {SparkMonitor} monitor - The parent singleton SparkMonitor instance.
  * @param {CodeCell} cell - The Jupyter CodeCell instance of the cell.
  */
-function CellMonitor(monitor, cell, appName) {
+function CellMonitor(monitor, cell, appId, sparkUiUrl) {
     var that = this;
     window.cm = this;//Debugging from console
 
     this.monitor = monitor; //Parent SparkMonitor instance
-    this.cell = cell        //Jupyter Cell instance
-    this.appName = appName  //Spark app name
+    this.cell = cell;       //Jupyter Cell instance
+    this.appId = appId;
+    this.sparkUiUrl = sparkUiUrl;
     this.view = "jobs";     //The current display tab -- "jobs" || "timeline" || "tasks"
     this.lastview = "jobs"; //The previous display tab, used for restoring hidden display
 
@@ -78,7 +79,7 @@ CellMonitor.prototype.createDisplay = function () {
         var element = $(WidgetHTML).hide();
         this.displayElement = element;
         this.cell.element.find('.inner_cell').append(element);
-        element.find('.appname').html(this.appName);
+        element.find('.appId').html(this.appId);
 
         element.slideToggle();
         this.displayVisible = true;
@@ -89,7 +90,7 @@ CellMonitor.prototype.createDisplay = function () {
         if (this.cellcompleted) element.find('.stopbutton').hide();
         element.find('.closebutton').click(function () { that.removeDisplay(); });
 
-        element.find('.sparkuitabbutton').click(function () { that.openSparkUI(''); });
+        element.find('.sparkuitabbutton').click(function () { that.openSparkUI('/jobs'); });
         element.find('.titlecollapse').click(function () {
             if (that.view != "hidden") {
                 that.lastview = that.view;
@@ -144,29 +145,13 @@ CellMonitor.prototype.stopJobs = function () {
 }
 
 /** 
- * Opens the Spark UI in an IFrame.
+ * Opens the Spark UI in a new window.
  * @param {string} [url=] - A relative url to open within the main domain.
  */
 CellMonitor.prototype.openSparkUI = function (url) {
+    var base_url = this.sparkUiUrl.replace("%APP_ID%", this.appId);
     if (!url) url = '';
-    var iframe = $('\
-                    <div style="overflow:hidden">\
-                    <iframe src="'+ Jupyter.notebook.base_url + 'sparkmonitor/' + url + '" frameborder="0" scrolling="yes" class="sparkuiframe">\
-                    </iframe>\
-                    </div>\
-                    ');
-    iframe.find('.sparkuiframe').css('background-image', 'url("' + requirejs.toUrl('./' + spinner) + '")');
-    iframe.find('.sparkuiframe').css('background-repeat', 'no-repeat');
-    iframe.find('.sparkuiframe').css('background-position', "50% 50%");
-    iframe.find('.sparkuiframe').width('100%');
-    iframe.find('.sparkuiframe').height('100%');
-    iframe.dialog({
-        title: "Spark UI 127.0.0.1:4040",
-        width: 1000,
-        height: 500,
-        autoResize: false,
-        dialogClass: "sparkui-dialog"
-    });
+    window.open(base_url + url);
 }
 
 /** Renders a view specified 

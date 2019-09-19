@@ -148,12 +148,17 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     startTime = appStarted.time
     appId = appStarted.appId.getOrElse("null")
     println("SPARKMONITOR_LISTENER: Application Started: " + appId + " ...Start Time: " + appStarted.time)
+
+    // the JS replaces %APP_ID% with application ID
+    val uiURL = Option(System.getenv("SPARK_MONITOR_UI")).getOrElse("http://localhost:4040")
+
     val json = ("msgtype" -> "sparkApplicationStart") ~
       ("startTime" -> startTime) ~
       ("appId" -> appId) ~
       ("appAttemptId" -> appStarted.appAttemptId.getOrElse("null")) ~
       ("appName" -> appStarted.appName) ~
-      ("sparkUser" -> appStarted.sparkUser)
+      ("sparkUser" -> appStarted.sparkUser) ~
+      ("sparkUiUrl" -> uiURL)
 
     send(pretty(render(json)))
   }
