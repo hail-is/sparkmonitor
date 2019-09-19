@@ -7,9 +7,12 @@ js:
 	yarn install
 	yarn run webpack
 
-.PHONY: install
-install: js jar
+.PHONY: wheel
+wheel: js jar
 	rm -f dist/*
 	python setup.py sdist bdist_wheel
+
+.PHONY: install
+install: wheel
 	-pip uninstall sparkmonitor -y
 	pip install $(wildcard dist/*.whl)
