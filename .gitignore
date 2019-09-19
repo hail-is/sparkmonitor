@@ -10,3 +10,7 @@ extension/node_modules/
 extension/sparkmonitor/static/
 *.jar
 extension/docs/
+*.idea
+extension/extension.iml
+extension/scalalistener/.editorconfig
+out/
