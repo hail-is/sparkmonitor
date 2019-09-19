@@ -90,7 +90,7 @@ CellMonitor.prototype.createDisplay = function () {
         if (this.cellcompleted) element.find('.stopbutton').hide();
         element.find('.closebutton').click(function () { that.removeDisplay(); });
 
-        element.find('.sparkuitabbutton').click(function () { that.openSparkUI('/jobs'); });
+        element.find('.sparkuitabbutton').click(function () { window.open(that.getSparkUI('/jobs')); });
         element.find('.titlecollapse').click(function () {
             if (that.view != "hidden") {
                 that.lastview = that.view;
@@ -148,10 +148,10 @@ CellMonitor.prototype.stopJobs = function () {
  * Opens the Spark UI in a new window.
  * @param {string} [url=] - A relative url to open within the main domain.
  */
-CellMonitor.prototype.openSparkUI = function (url) {
+CellMonitor.prototype.getSparkUI = function (url) {
     var base_url = this.sparkUiUrl.replace("%APP_ID%", this.appId);
     if (!url) url = '';
-    window.open(base_url + url);
+    return base_url + url;
 }
 
 /** Renders a view specified 
@@ -413,7 +413,8 @@ CellMonitor.prototype.updateJobItem = function (element, data, redraw = false) {
             element.find('.tdjobitemprogress .val2').width(val2 + '%');
         }
         element.find('.tdjobid').text(data.id);
-        element.find('.tdjobname').text(data.name);
+        var jobLink = '<td class="tdjobname"><a href="' + that.getSparkUI('/jobs/job/?id=' + data.id) + '" target="_blank">' + data.name + "</a></td>";
+        element.find('.tdjobname').html(jobLink);
         var status = $('<span></span>').addClass(data.status).text(data.status).addClass('tditemjobstatus');
         element.find('.tdjobstatus').html(status);
         element.find('.tdjobstages').text('' + data.numCompletedStages + '/' + data.numStages + '' + (data.numSkippedStages > 0 ? ' (' + data.numSkippedStages + ' skipped)' : '        ') + (data.numActiveStages > 0 ? '(' + data.numActiveStages + ' active) ' : ''));
