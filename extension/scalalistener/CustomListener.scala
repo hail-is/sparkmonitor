@@ -1,4 +1,5 @@
 package sparkmonitor.listener
+
 /** This package provides a custom implementation of a SparkListener interface that forwards data to Jupyter Kernels. */
 
 import org.apache.spark.scheduler._
@@ -9,9 +10,8 @@ import org.apache.spark._
 import org.apache.spark.TaskEndReason
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.SparkContext
-import sparkmonitor.listener.UIData._
 import scala.collection.mutable
-import scala.collection.mutable.{ HashMap, HashSet, LinkedHashMap, ListBuffer }
+import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap, ListBuffer}
 import java.net._
 import java.io._
 
@@ -24,9 +24,9 @@ import java.io._
  *  - Overrides methods that correspond to events in a spark Application. 
  *  - The argument for each overrided method contains the received data for that event. (See SparkListener docs for more information.)
  *  - For each application, job, stage, and task there is a 'start' and an 'end' event. For executors, there are 'added' and 'removed' events
- * 
- *  @constructor called by Spark internally
- *  @param conf Spark configuration object used to start the spark application.
+ *
+ * @constructor called by Spark internally
+ * @param conf Spark configuration object used to start the spark application.
  */
 class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
@@ -43,7 +43,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     case exception: Throwable => println("\nSPARKMONITOR_LISTENER: Exception creating socket:" + exception + "\n")
   }
 
-  /** Send a string message to the kernel using the open socket.*/
+  /** Send a string message to the kernel using the open socket. */
   def send(msg: String): Unit = {
     try {
       //println("\nSPARKMONITOR_LISTENER: --------------Sending Message:------------------\n"+msg+
@@ -55,7 +55,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     }
   }
 
-  /** Close the socket connection to the kernel.*/
+  /** Close the socket connection to the kernel. */
   def closeConnection(): Unit = {
     println("SPARKMONITOR_LISTENER: Closing Connection")
     out.close()
@@ -104,6 +104,8 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
   @volatile var totalCores: Int = 0
   @volatile var numExecutors: Int = 0
 
+  @volatile var lastUpdatedTimeNS = 0L
+
   /**
    * Called when a spark application starts.
    *
@@ -145,10 +147,10 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
     (stageInfo.stageId.toString ->
       ("attemptId" -> stageInfo.attemptId) ~
-      ("name" -> stageInfo.name) ~
-      ("numTasks" -> stageInfo.numTasks) ~
-      ("completionTime" -> completionTime) ~
-      ("submissionTime" -> submissionTime))
+        ("name" -> stageInfo.name) ~
+        ("numTasks" -> stageInfo.numTasks) ~
+        ("completionTime" -> completionTime) ~
+        ("submissionTime" -> submissionTime))
   }
 
   /**
@@ -161,7 +163,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
     val jobGroup = for (
       props <- Option(jobStart.properties);
-      group <- Option(props.getProperty("spark.jobGroup.id"))
+        group <- Option(props.getProperty("spark.jobGroup.id"))
     ) yield group
 
     val jobData: JobUIData =
@@ -261,6 +263,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     send(pretty(render(json)))
   }
 
+
   /** Called when a stage is completed. */
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
     val stage = stageCompleted.stageInfo
@@ -284,8 +287,8 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     }
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
-      jobId <- activeJobsDependentOnStage;
-      jobData <- jobIdToData.get(jobId)
+        jobId <- activeJobsDependentOnStage;
+        jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
@@ -323,8 +326,8 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
-      jobId <- activeJobsDependentOnStage;
-      jobData <- jobIdToData.get(jobId)
+        jobId <- activeJobsDependentOnStage;
+        jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveStages += 1
       // If a stage retries again, it should be removed from completedStageIndices set
@@ -346,6 +349,10 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     send(pretty(render(json)))
   }
 
+  def notifyTasks(): Unit = synchronized {
+
+  }
+
   /** Called when a task is started. */
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val taskInfo = taskStart.taskInfo
@@ -359,21 +366,21 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     var jobjson = ("jobdata" -> "taskstart")
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskStart.stageId);
-      jobId <- activeJobsDependentOnStage;
-      jobData <- jobIdToData.get(jobId)
+        jobId <- activeJobsDependentOnStage;
+        jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveTasks += 1
       val jobjson = ("jobdata" ->
         ("jobId" -> jobData.jobId) ~
-        ("numTasks" -> jobData.numTasks) ~
-        ("numActiveTasks" -> jobData.numActiveTasks) ~
-        ("numCompletedTasks" -> jobData.numCompletedTasks) ~
-        ("numSkippedTasks" -> jobData.numSkippedTasks) ~
-        ("numFailedTasks" -> jobData.numFailedTasks) ~
-        ("reasonToNumKilled" -> jobData.reasonToNumKilled) ~
-        ("numActiveStages" -> jobData.numActiveStages) ~
-        ("numSkippedStages" -> jobData.numSkippedStages) ~
-        ("numFailedStages" -> jobData.numFailedStages))
+          ("numTasks" -> jobData.numTasks) ~
+          ("numActiveTasks" -> jobData.numActiveTasks) ~
+          ("numCompletedTasks" -> jobData.numCompletedTasks) ~
+          ("numSkippedTasks" -> jobData.numSkippedTasks) ~
+          ("numFailedTasks" -> jobData.numFailedTasks) ~
+          ("reasonToNumKilled" -> jobData.reasonToNumKilled) ~
+          ("numActiveStages" -> jobData.numActiveStages) ~
+          ("numSkippedStages" -> jobData.numSkippedStages) ~
+          ("numFailedStages" -> jobData.numFailedStages))
     }
     val json = ("msgtype" -> "sparkTaskStart") ~
       ("launchTime" -> taskInfo.launchTime) ~
@@ -419,8 +426,8 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
       for (
         activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
-        jobId <- activeJobsDependentOnStage;
-        jobData <- jobIdToData.get(jobId)
+          jobId <- activeJobsDependentOnStage;
+          jobData <- jobIdToData.get(jobId)
       ) {
         jobData.numActiveTasks -= 1
         taskEnd.reason match {
@@ -434,7 +441,9 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
     var jsonMetrics: JObject = ("" -> "")
     val totalExecutionTime = info.finishTime - info.launchTime
+
     def toProportion(time: Long) = time.toDouble / totalExecutionTime * 100
+
     var metricsOpt = Option(taskEnd.taskMetrics)
     val shuffleReadTime = metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
     val shuffleReadTimeProportion = toProportion(shuffleReadTime)
@@ -592,55 +601,52 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 }
 
 /** Data Structures for storing received from listener events. */
-object UIData {
+/**
+ * Data about a job.
+ *
+ * This is stored to track aggregated valus such as number of stages and tasks, and to track skipped and failed stages
+ */
+class JobUIData(
+  var jobId: Int = -1,
+  var submissionTime: Option[Long] = None,
+  var completionTime: Option[Long] = None,
+  var stageIds: Seq[Int] = Seq.empty,
+  var jobGroup: Option[String] = None,
+  var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN,
+  var numTasks: Int = 0,
+  var numActiveTasks: Int = 0,
+  var numCompletedTasks: Int = 0,
+  var numSkippedTasks: Int = 0,
+  var numFailedTasks: Int = 0,
+  var reasonToNumKilled: Map[String, Int] = Map.empty,
+  var numActiveStages: Int = 0,
+  // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
+  var completedStageIndices: mutable.HashSet[Int] = new mutable.HashSet[Int](),
+  var numSkippedStages: Int = 0,
+  var numFailedStages: Int = 0)
 
-  /**
-   * Data about a job.
-   *
-   * This is stored to track aggregated valus such as number of stages and tasks, and to track skipped and failed stages
-   */
-  class JobUIData(
-    var jobId: Int = -1,
-    var submissionTime: Option[Long] = None,
-    var completionTime: Option[Long] = None,
-    var stageIds: Seq[Int] = Seq.empty,
-    var jobGroup: Option[String] = None,
-    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN,
-    var numTasks: Int = 0,
-    var numActiveTasks: Int = 0,
-    var numCompletedTasks: Int = 0,
-    var numSkippedTasks: Int = 0,
-    var numFailedTasks: Int = 0,
-    var reasonToNumKilled: Map[String, Int] = Map.empty,
-    var numActiveStages: Int = 0,
-    // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
-    var completedStageIndices: mutable.HashSet[Int] = new mutable.HashSet[Int](),
-    var numSkippedStages: Int = 0,
-    var numFailedStages: Int = 0)
+/**
+ * Data about a stage.
+ *
+ * This is stored to track aggregated valus such as number of tasks.
+ */
+class StageUIData {
+  var numActiveTasks: Int = _
+  var numCompleteTasks: Int = _
+  var completedIndices = new HashSet[Int]()
+  var numFailedTasks: Int = _
+  var description: Option[String] = None
+}
 
-  /**
-   * Data about a stage.
-   *
-   * This is stored to track aggregated valus such as number of tasks.
-   */
-  class StageUIData {
-    var numActiveTasks: Int = _
-    var numCompleteTasks: Int = _
-    var completedIndices = new HashSet[Int]()
-    var numFailedTasks: Int = _
-    var description: Option[String] = None
-  }
-  
-  /**
-   * Data about an executor.
-   *
-   * When an executor is removed, its number of cores is not available, so it is looked up here.
-   */
-  class ExecutorData {
-    var numCores: Int = _
-    var executorId: String = _
-    var timeAdded: Long = _
-    var timeRemoved: Long = _
-    var executorHost: String = _
-  }
+/**
+ * Data about an executor.
+ *
+ * When an executor is removed, its number of cores is not available, so it is looked up here.
+ */
+class ExecutorData {
+  var numCores: Int = _
+  var executorId: String = _
+  var timeAdded: Long = _
+  var timeRemoved: Long = _
+  var executorHost: String = _
 }

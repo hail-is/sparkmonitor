@@ -3,7 +3,6 @@ var path = require('path');
 module.exports = {
     entry: {
         module: './js/module.js',
-        timeline: './js/Timeline.js',
         taskchart: './js/TaskChart.js'
     },
     output: {

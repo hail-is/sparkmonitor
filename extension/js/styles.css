@@ -7,7 +7,7 @@
 
 /*--------------Title Bar--------------------*/
 .pm .title {
-  background-color: #F37600;
+  background-color: #2A388F;
   overflow: hidden;
   height: 30px;
 }
@@ -24,6 +24,7 @@
 }
 
 .pm .tbitem {
+  color: white;
   padding: 0px 15px;
   height: 30px;
   text-align: center;
@@ -36,7 +37,7 @@
 }
 
 .pm .titlecollapse:hover {
-  background-color: #C45917;
+  background-color: #2A388F;
 }
 
 .headericon {
@@ -88,13 +89,13 @@
 .badgeexecutor, .badgeexecutorcores {
   font-size: 80%;
   padding: 5px 8px;
-  color: white;
+  color: black;
   border-radius: 2px;
   box-shadow: 0px 0px 1px 0px rgba(0, 0, 0, 0.36);
   white-space: nowrap;
   font-weight: bold;
   margin: 0px 2px;
-  background-color: rgba(117, 57, 0, 0.65);
+  background-color: #b4b4b4;
 }
 
 .uibuttondisabled {
@@ -114,29 +115,25 @@
   vertical-align: middle;
 }
 
-.pm .timelinetabbuttonicon {
-  background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAQAAABKfvVzAAAALklEQVR4AWMYRuA/YTjYNdA/lLCJka6BvgDF4gY4uwFZhnQN9PcDIZp0DcMGAADGCJlpwLGAQAAAAABJRU5ErkJggg==);
-}
-
 .pm .sparkuitabbuttonicon {
-  background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAQAAABKfvVzAAAASklEQVR4AWMYnCCQ4SXDfyLgKwZ/sHq4csLwJVg9mIkfwNUNPg3/Bp+Gv4NPwx96aXhFdOJ7AtHgT2R6fcHgg9ViNIgGCGsY/AAAawWT4i3LWOwAAAAASUVORK5CYII=);
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAm0lEQVRIS+2UQQ4BQRRE6+EK2MydxB24k7iFxJUsZpyBkhHfivTC72ESvexFvanXk0KVD5XzNQzA9lrSTtIiqdFZ0hY43BvYbhPD4xs7YBkA97dAijLbz7w/4OU/8VBkYFJT0fgBV2BaU9H4ARdgVlPRsIBO0jxpSSPmBDShaCVpn7io/TpvgGNxPWMZ37UrLfD3AZ++S7HBzwNuaU6HGdpmeQAAAAAASUVORK5CYII=')
 }
 
 .pm .taskviewtabbuttonicon {
-  background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAQAAABKfvVzAAAAQ0lEQVR4Ac3SsQ2AQAzF0LcgOrH/AuSWCHUa0pxQ7Pa7++ZyC/nhthRCNoZC9h4OMCXA9ACDg7+/tNv5o7BEM79M5QVZbBWGPizgRwAAAABJRU5ErkJggg==);
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAn0lEQVRIS+2V7Q3CMBBDn4fgYyvEEOyE2AIxVdshjCoRpFZNqS6kCET++56dRGdR+ajyfNYF2D4CZ2AbTNYBJ0nXpB8ksN0UDE8zW0m7HMBB5wOZpKfxcYLPApIz27NGwgm+DzB2/PYEvw/IXdniX/Tqiv6A8Fpa/AZRwhygBTbRwQ9dI2mfW9cH4FLQCX2f9IVzmwQUOp+Ur9vJNRLcAY3+ohmMpyfNAAAAAElFTkSuQmCC');
 }
 
 .pm .jobtabbuttonicon {
-  background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAQAAABKfvVzAAAAG0lEQVR4AWMY2eA/BMJYmHAQahj19Kinhz0AAOazv0F7pjjzAAAAAElFTkSuQmCC);
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAVElEQVRIS2NkoDFgpLH5DKMWEAxhjCD6////f2RdjIyMjOhihEwF6YGpGbUAa2jhDSJC4Uuq/GgckB4HNM8HpEYiIfWjkTwSI5lQqiBVfrTKJBhiAIjIYBm1LAUbAAAAAElFTkSuQmCC');
 }
 
 .pm .stopbuttonicon {
-  background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAQAAABKfvVzAAAAr0lEQVR4Ab2TxxWDQBBDv2M3bmI7cJquoAsoiJNzAXvdAjBRzjl8XeaNJDL8nSFGyopQaFVMVmzuMGVLfqZtsb1Kl5j8hmK6XFDE7yi6vJj8gaant7pr1hkOr5DHkeleBghTxAGjpuKLCZw8Q6RaFqGmokleglhpqQqKS0tE0FIVxSXCB4UnL+nlm/7gsQ7ZPvPiXvs0Jh9+fNAluhPvfvoDiQFGwpJQaFlMVmz+zB4uewsoywq4xgAAAABJRU5ErkJggg==);
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAADxQTFRFAAAA////////////////////////////////////////////////7re37G5u////////////////////GhEkPwAAABR0Uk5TAAZWptrzU93/Ao6N3v//6gWl2VLCvRpMAAAAjklEQVR4nJ2RWQ7DIAwFg8HhkTRsvf9dy5KNVFCp7weYQQbMNP0bQVIxK0mi5bPGHj3fsFlwy2JO0XBgPevgkb2aeKX5Zl1Gzm75HF8EZWJtNi4NeUVFyLo1GVc1EIpQOMzBEYtgXKZy8Fh0S3UP715X6M4Dv1vy/tXEyawNv9re/agUTyEyx0B+8P/jfABktQyTrSniFAAAAABJRU5ErkJggg==');
 }
 
 .pm .closebuttonicon {
   background-size: 20px;
-  background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAQAAABKfvVzAAAAa0lEQVR4AeWSsREDIQwEtwlRhO3vP0JFPLgeHJDdnEfBh2y8F2hHnM5FJ1AayRtLshiE6F8WHUsw9kT0m8BDMFlMotZ10rzuaHtS63qo6s8HWkaLFXpo5ErXyKWukS25dRM5sXz+Pt+Ls/kBnolC6l7shJkAAAAASUVORK5CYII=);
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAA+UlEQVRIS+2U2Q3CQBBDn4uAIjiKAJqgCOgFuqCKpAiOIqCIQYOyCK32ygcSH+RzM2uPvZ4RX/70ZXz+BFWHkxaZ2RI4AFtJjxKKmU2BE7CXdI1rcwQdsAIuwDpHMoD3wAzoJG1aCSZ+AVjkSCLwM7BJNZJNkZk5iXc3B1z6KgC0gruaYkwTJOvBgmBLtvNgVXUOhm7drqDE77jnVfCqgtBFZIkfN4H/BkHiQd2ibLqaYpqx5mXL8K8Y4U+SUkx9QpNpKUW4SUFLzlMRlnRvJQiropiWKMK9pDAnb57cLvJHPI5cdjtJtyYF1R08oqA6ySOwkqV/gqqDT9IvhBlmOjljAAAAAElFTkSuQmCC');
   background-repeat: no-repeat;
   background-position: center;
 }
@@ -163,11 +160,11 @@
 }
 
 .pm .tabbutton:hover {
-  background-color: #C45917;
+  background-color: #2A388F;
 }
 
 .pm .cancelbutton:hover {
-  background-color: #C45917;
+  background-color: #2A388F;
 }
 
 .pm .tabbuttonactive {
@@ -271,7 +268,7 @@
 }
 
 .sparkui-dialog .ui-widget-header {
-  border: 1px solid rgb(243, 118, 0);
+  border: 1px solid rgb(196,228,255);
   background: #f37600;
   color: #000;
   font-weight: bold;
