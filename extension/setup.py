@@ -18,6 +18,6 @@ setup(name='sparkmonitor',
       packages=find_packages(),
       zip_safe=False,
       install_requires=[
-          'bs4'
+          'beautifulsoup4'
       ],
       )

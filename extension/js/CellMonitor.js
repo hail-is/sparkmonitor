@@ -15,14 +15,8 @@ import moment from 'moment'                 // For handling durations
 import 'moment-duration-format';            // Plugin for moment to format durations to strings
 
 //Asynchronously loaded constructors for Timeline and TaskChart
-var Timeline = null;
 var TaskChart = null;
 
-//Loading modules asynchronously
-requirejs(['./timeline'], function (timeline) {
-    Timeline = timeline;
-    console.log("SparkMonitor: Timeline module loaded", [timeline]);
-});
 requirejs(['./taskchart'], function (taskchart) {
     TaskChart = taskchart;
     console.log("SparkMonitor: TaskChart module loaded", [taskchart])
@@ -34,12 +28,15 @@ requirejs(['./taskchart'], function (taskchart) {
  * @param {SparkMonitor} monitor - The parent singleton SparkMonitor instance.
  * @param {CodeCell} cell - The Jupyter CodeCell instance of the cell.
  */
-function CellMonitor(monitor, cell) {
+function CellMonitor(monitor, cell, appName, appId, sparkUiUrl) {
     var that = this;
     window.cm = this;//Debugging from console
 
     this.monitor = monitor; //Parent SparkMonitor instance
-    this.cell = cell        //Jupyter Cell instance
+    this.cell = cell;       //Jupyter Cell instance
+    this.appId = appId;
+    this.appName = appName;
+    this.sparkUiUrl = sparkUiUrl;
     this.view = "jobs";     //The current display tab -- "jobs" || "timeline" || "tasks"
     this.lastview = "jobs"; //The previous display tab, used for restoring hidden display
 
@@ -70,11 +67,9 @@ function CellMonitor(monitor, cell) {
     this.stageIdtoJobId = {};
 
     // Timeline and TaskChart module instances
-    this.timeline = null;
     this.taskchart = null;
 
     // Only if the load successfully create these views.
-    if (Timeline) this.timeline = new Timeline(this);
     if (TaskChart) this.taskchart = new TaskChart(this);
 }
 
@@ -85,6 +80,8 @@ CellMonitor.prototype.createDisplay = function () {
         var element = $(WidgetHTML).hide();
         this.displayElement = element;
         this.cell.element.find('.inner_cell').append(element);
+        element.find('.appname').text(this.appName);
+
         element.slideToggle();
         this.displayVisible = true;
         if (!this.allcompleted) this.badgeInterval = setInterval($.proxy(this.setBadges, this), 1000);
@@ -94,7 +91,7 @@ CellMonitor.prototype.createDisplay = function () {
         if (this.cellcompleted) element.find('.stopbutton').hide();
         element.find('.closebutton').click(function () { that.removeDisplay(); });
 
-        element.find('.sparkuitabbutton').click(function () { that.openSparkUI(''); });
+        element.find('.sparkuitabbutton').click(function () { window.open(that.getSparkUI('/jobs')); });
         element.find('.titlecollapse').click(function () {
             if (that.view != "hidden") {
                 that.lastview = that.view;
@@ -112,13 +109,9 @@ CellMonitor.prototype.createDisplay = function () {
                 that.showView(that.lastview);
             }
         });
-        if (!this.timeline) element.find('.timelinetabbutton').hide();
         if (!this.taskchart) element.find('.taskviewtabbutton').hide();
         element.find('.taskviewtabbutton').click(function () {
             if (that.view != 'tasks') { that.showView("tasks"); }
-        });
-        element.find('.timelinetabbutton').click(function () {
-            if (that.view != 'timeline') { that.showView("timeline"); }
         });
         element.find('.jobtabletabbutton').click(function () {
             if (that.view != 'jobs') { that.showView("jobs"); }
@@ -153,29 +146,13 @@ CellMonitor.prototype.stopJobs = function () {
 }
 
 /** 
- * Opens the Spark UI in an IFrame.
+ * Opens the Spark UI in a new window.
  * @param {string} [url=] - A relative url to open within the main domain.
  */
-CellMonitor.prototype.openSparkUI = function (url) {
+CellMonitor.prototype.getSparkUI = function (url) {
+    var base_url = this.sparkUiUrl.replace("%APP_ID%", this.appId);
     if (!url) url = '';
-    var iframe = $('\
-                    <div style="overflow:hidden">\
-                    <iframe src="'+ Jupyter.notebook.base_url + 'sparkmonitor/' + url + '" frameborder="0" scrolling="yes" class="sparkuiframe">\
-                    </iframe>\
-                    </div>\
-                    ');
-    iframe.find('.sparkuiframe').css('background-image', 'url("' + requirejs.toUrl('./' + spinner) + '")');
-    iframe.find('.sparkuiframe').css('background-repeat', 'no-repeat');
-    iframe.find('.sparkuiframe').css('background-position', "50% 50%");
-    iframe.find('.sparkuiframe').width('100%');
-    iframe.find('.sparkuiframe').height('100%');
-    iframe.dialog({
-        title: "Spark UI 127.0.0.1:4040",
-        width: 1000,
-        height: 500,
-        autoResize: false,
-        dialogClass: "sparkui-dialog"
-    });
+    return base_url + url;
 }
 
 /** Renders a view specified 
@@ -208,14 +185,6 @@ CellMonitor.prototype.showView = function (view) {
             if (this.taskchart) this.taskchart.create();
             else throw "Error Task Chart Module not loaded yet"
             break;
-        case "timeline":
-            this.hideView(this.view);
-            this.view = "timeline";
-            element.find('.timelinecontent').addClass('tabcontentactive');
-            element.find('.timelinetabbutton').addClass('tabbuttonactive');
-            if (this.timeline) this.timeline.create();
-            else throw "Error Timeline Module not loaded yet"
-            break;
     }
 }
 
@@ -231,9 +200,6 @@ CellMonitor.prototype.hideView = function (view) {
                 break;
             case "tasks":
                 if (this.taskchart) this.taskchart.hide();
-                break;
-            case "timeline":
-                if (this.timeline) this.timeline.hide();
                 break;
         }
     }
@@ -285,7 +251,6 @@ CellMonitor.prototype.onAllCompleted = function () {
         this.badgeInterval = null;
     }
     if (this.displayVisible) this.setBadges(true);
-    if (this.timeline) this.timeline.onAllCompleted();
     if (this.taskchart) this.taskchart.onAllCompleted();
 }
 
@@ -449,7 +414,8 @@ CellMonitor.prototype.updateJobItem = function (element, data, redraw = false) {
             element.find('.tdjobitemprogress .val2').width(val2 + '%');
         }
         element.find('.tdjobid').text(data.id);
-        element.find('.tdjobname').text(data.name);
+        var jobLink = '<td class="tdjobname"><a href="' + that.getSparkUI('/jobs/job/?id=' + data.id) + '" target="_blank">' + data.name + "</a></td>";
+        element.find('.tdjobname').html(jobLink);
         var status = $('<span></span>').addClass(data.status).text(data.status).addClass('tditemjobstatus');
         element.find('.tdjobstatus').html(status);
         element.find('.tdjobstages').text('' + data.numCompletedStages + '/' + data.numStages + '' + (data.numSkippedStages > 0 ? ' (' + data.numSkippedStages + ' skipped)' : '        ') + (data.numActiveStages > 0 ? '(' + data.numActiveStages + ' active) ' : ''));
@@ -548,7 +514,6 @@ CellMonitor.prototype.onSparkJobStart = function (data) {
         this.createDisplay();
         this.initialDisplayCreated = true;
     }
-    if (this.timeline) this.timeline.onSparkJobStart(data);
     if (this.taskchart) this.taskchart.onSparkJobStart(data);
 }
 
@@ -576,7 +541,6 @@ CellMonitor.prototype.onSparkJobEnd = function (data) {
     this.badgesmodified = true;
     this.jobData[data.jobId]['end'] = new Date(data.completionTime);
     this.jobData[data.jobId]['modified'] = true;
-    if (this.timeline) this.timeline.onSparkJobEnd(data);
     if (this.taskchart) this.taskchart.onSparkJobEnd(data);
     if (this.numActiveJobs == 0 && this.cellcompleted && !this.allcompleted) {
         this.onAllCompleted();
@@ -599,8 +563,6 @@ CellMonitor.prototype.onSparkStageSubmitted = function (data) {
     this.stageData[data.stageId]['start'] = submissionDate;
     this.stageData[data.stageId]['numTasks'] = data.numTasks;
     this.stageData[data.stageId]['modified'] = true;
-
-    if (this.timeline) this.timeline.onSparkStageSubmitted(data);
 }
 
 /** Called when a Spark stage is completed. */
@@ -622,48 +584,21 @@ CellMonitor.prototype.onSparkStageCompleted = function (data) {
     this.stageData[data.stageId]['start'] = new Date(data.submissionTime);
     this.stageData[data.stageId]['end'] = new Date(data.completionTime);
     this.stageData[data.stageId]['modified'] = true;
-
-    if (this.timeline) this.timeline.onSparkStageCompleted(data);
 }
 
-/** Called when a Spark task is started. */
-CellMonitor.prototype.onSparkTaskStart = function (data) {
+/** Called when a Spark stage updates. */
+CellMonitor.prototype.onSparkStageUpdate = function(data) {
     var that = this;
-    this.stageData[data.stageId]['numActiveTasks'] += 1;
-    this.stageData[data.stageId]['firsttaskstart'] = new Date(data.launchTime);
+    this.stageData[data.stageId]['numActiveTasks'] = data.numActiveTasks;
+    this.stageData[data.stageId]['numCompletedTasks'] = data.numCompletedTasks;
     this.stageData[data.stageId]['modified'] = true;
 
     this.stageIdtoJobId[data.stageId].forEach(function (jobId) {
-        that.jobData[jobId]['numActiveTasks'] += 1;
+        that.jobData[jobId]['numActiveTasks'] = data.numActiveTasks;
+        that.jobData[jobId]['numCompletedTasks'] = data.numCompletedTasks;
         that.jobData[jobId]['modified'] = true;
     })
-    if (this.timeline) this.timeline.onSparkTaskStart(data);
-    if (this.taskchart) this.taskchart.onSparkTaskStart(data);
-}
-
-/** Called when a Spark task is ended. */
-CellMonitor.prototype.onSparkTaskEnd = function (data) {
-    var that = this;
-    this.stageData[data.stageId]['numActiveTasks'] -= 1;
-    this.stageData[data.stageId]['modified'] = true;
-    if (data.status == "SUCCESS") {
-        this.stageData[data.stageId]['numCompletedTasks'] += 1;
-    }
-    else {
-        this.stageData[data.stageId]['numFailedTasks'] += 1;
-    }
-    this.stageIdtoJobId[data.stageId].forEach(function (jobId) {
-        that.jobData[jobId]['numActiveTasks'] -= 1;
-        that.jobData[jobId]['modified'] = true;
-        if (data.status == "SUCCESS") {
-            that.jobData[jobId]['numCompletedTasks'] += 1;
-        }
-        else {
-            that.jobData[jobId]['numFailedTasks'] += 1;
-        }
-    });
-    if (this.timeline) this.timeline.onSparkTaskEnd(data);
-    if (this.taskchart) this.taskchart.onSparkTaskEnd(data);
+    if (this.taskchart) this.taskchart.onSparkStageUpdate(data);
 }
 
 /** Called when an executor is added to spark */

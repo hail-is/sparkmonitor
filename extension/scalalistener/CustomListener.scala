@@ -1,4 +1,5 @@
 package sparkmonitor.listener
+
 /** This package provides a custom implementation of a SparkListener interface that forwards data to Jupyter Kernels. */
 
 import org.apache.spark.scheduler._
@@ -9,9 +10,8 @@ import org.apache.spark._
 import org.apache.spark.TaskEndReason
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.SparkContext
-import sparkmonitor.listener.UIData._
 import scala.collection.mutable
-import scala.collection.mutable.{ HashMap, HashSet, LinkedHashMap, ListBuffer }
+import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap, ListBuffer}
 import java.net._
 import java.io._
 
@@ -24,9 +24,9 @@ import java.io._
  *  - Overrides methods that correspond to events in a spark Application. 
  *  - The argument for each overrided method contains the received data for that event. (See SparkListener docs for more information.)
  *  - For each application, job, stage, and task there is a 'start' and an 'end' event. For executors, there are 'added' and 'removed' events
- * 
- *  @constructor called by Spark internally
- *  @param conf Spark configuration object used to start the spark application.
+ *
+ * @constructor called by Spark internally
+ * @param conf Spark configuration object used to start the spark application.
  */
 class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
@@ -43,7 +43,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     case exception: Throwable => println("\nSPARKMONITOR_LISTENER: Exception creating socket:" + exception + "\n")
   }
 
-  /** Send a string message to the kernel using the open socket.*/
+  /** Send a string message to the kernel using the open socket. */
   def send(msg: String): Unit = {
     try {
       //println("\nSPARKMONITOR_LISTENER: --------------Sending Message:------------------\n"+msg+
@@ -55,7 +55,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     }
   }
 
-  /** Close the socket connection to the kernel.*/
+  /** Close the socket connection to the kernel. */
   def closeConnection(): Unit = {
     println("SPARKMONITOR_LISTENER: Closing Connection")
     out.close()
@@ -104,6 +104,41 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
   @volatile var totalCores: Int = 0
   @volatile var numExecutors: Int = 0
 
+  @volatile var lastUpdatedTimeNS = 0L
+  val stagesChanged = new mutable.ArrayBuffer[((StageId, StageAttemptId), Long)]
+
+  class TaskUpdaterThread() extends Runnable {
+    def run(): Unit = {
+      while (true) {
+        synchronized {
+          val currentTime = System.nanoTime()
+          if (stagesChanged.nonEmpty) {
+            val byStage = stagesChanged.groupBy(_._1).mapValues(_.map(_._2).max).toArray
+
+            byStage.foreach { case ((stageId, stageAttemptId), updateTime) =>
+
+              val data = stageIdToData((stageId, stageAttemptId))
+              val json = ("msgtype" -> "sparkStageUpdate") ~
+                ("updateTime" -> updateTime) ~
+                ("stageId" -> stageId) ~
+                ("numActiveTasks" -> data.numActiveTasks) ~
+                ("numCompletedTasks" -> data.numCompleteTasks)
+
+              send(pretty(render(json)))
+            }
+
+            stagesChanged.clear()
+            lastUpdatedTimeNS = System.nanoTime()
+          }
+        }
+        Thread.sleep(50)
+      }
+    }
+  }
+
+  val t = new Thread(new TaskUpdaterThread())
+  t.start()
+
   /**
    * Called when a spark application starts.
    *
@@ -113,12 +148,17 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     startTime = appStarted.time
     appId = appStarted.appId.getOrElse("null")
     println("SPARKMONITOR_LISTENER: Application Started: " + appId + " ...Start Time: " + appStarted.time)
+
+    // the JS replaces %APP_ID% with application ID
+    val uiURL = Option(System.getenv("SPARK_MONITOR_UI")).getOrElse("http://localhost:4040")
+
     val json = ("msgtype" -> "sparkApplicationStart") ~
       ("startTime" -> startTime) ~
       ("appId" -> appId) ~
       ("appAttemptId" -> appStarted.appAttemptId.getOrElse("null")) ~
       ("appName" -> appStarted.appName) ~
-      ("sparkUser" -> appStarted.sparkUser)
+      ("sparkUser" -> appStarted.sparkUser) ~
+      ("sparkUiUrl" -> uiURL)
 
     send(pretty(render(json)))
   }
@@ -145,10 +185,10 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
     (stageInfo.stageId.toString ->
       ("attemptId" -> stageInfo.attemptId) ~
-      ("name" -> stageInfo.name) ~
-      ("numTasks" -> stageInfo.numTasks) ~
-      ("completionTime" -> completionTime) ~
-      ("submissionTime" -> submissionTime))
+        ("name" -> stageInfo.name) ~
+        ("numTasks" -> stageInfo.numTasks) ~
+        ("completionTime" -> completionTime) ~
+        ("submissionTime" -> submissionTime))
   }
 
   /**
@@ -161,7 +201,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
     val jobGroup = for (
       props <- Option(jobStart.properties);
-      group <- Option(props.getProperty("spark.jobGroup.id"))
+        group <- Option(props.getProperty("spark.jobGroup.id"))
     ) yield group
 
     val jobData: JobUIData =
@@ -261,6 +301,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     send(pretty(render(json)))
   }
 
+
   /** Called when a stage is completed. */
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {
     val stage = stageCompleted.stageInfo
@@ -284,8 +325,8 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
     }
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
-      jobId <- activeJobsDependentOnStage;
-      jobData <- jobIdToData.get(jobId)
+        jobId <- activeJobsDependentOnStage;
+        jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveStages -= 1
       if (stage.failureReason.isEmpty) {
@@ -323,8 +364,8 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(stage.stageId);
-      jobId <- activeJobsDependentOnStage;
-      jobData <- jobIdToData.get(jobId)
+        jobId <- activeJobsDependentOnStage;
+        jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveStages += 1
       // If a stage retries again, it should be removed from completedStageIndices set
@@ -355,40 +396,16 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
         new StageUIData
       })
       stageData.numActiveTasks += 1
+      stagesChanged += (((taskStart.stageId, taskStart.stageAttemptId), taskInfo.launchTime))
     }
     var jobjson = ("jobdata" -> "taskstart")
     for (
       activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskStart.stageId);
-      jobId <- activeJobsDependentOnStage;
-      jobData <- jobIdToData.get(jobId)
+        jobId <- activeJobsDependentOnStage;
+        jobData <- jobIdToData.get(jobId)
     ) {
       jobData.numActiveTasks += 1
-      val jobjson = ("jobdata" ->
-        ("jobId" -> jobData.jobId) ~
-        ("numTasks" -> jobData.numTasks) ~
-        ("numActiveTasks" -> jobData.numActiveTasks) ~
-        ("numCompletedTasks" -> jobData.numCompletedTasks) ~
-        ("numSkippedTasks" -> jobData.numSkippedTasks) ~
-        ("numFailedTasks" -> jobData.numFailedTasks) ~
-        ("reasonToNumKilled" -> jobData.reasonToNumKilled) ~
-        ("numActiveStages" -> jobData.numActiveStages) ~
-        ("numSkippedStages" -> jobData.numSkippedStages) ~
-        ("numFailedStages" -> jobData.numFailedStages))
     }
-    val json = ("msgtype" -> "sparkTaskStart") ~
-      ("launchTime" -> taskInfo.launchTime) ~
-      ("taskId" -> taskInfo.taskId) ~
-      ("stageId" -> taskStart.stageId) ~
-      ("stageAttemptId" -> taskStart.stageAttemptId) ~
-      ("index" -> taskInfo.index) ~
-      ("attemptNumber" -> taskInfo.attemptNumber) ~
-      ("executorId" -> taskInfo.executorId) ~
-      ("host" -> taskInfo.host) ~
-      ("status" -> taskInfo.status) ~
-      ("speculative" -> taskInfo.speculative)
-
-    //println("SPARKMONITOR_LISTENER: Task Started: \n"+ pretty(render(json)) + "\n")
-    send(pretty(render(json)))
   }
 
   /** Called when a task is ended. */
@@ -408,6 +425,7 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
         case org.apache.spark.Success =>
           stageData.completedIndices.add(info.index)
           stageData.numCompleteTasks += 1
+          stagesChanged += (((taskEnd.stageId, taskEnd.stageAttemptId), info.finishTime))
           None
         case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
           stageData.numFailedTasks += 1
@@ -419,8 +437,8 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 
       for (
         activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
-        jobId <- activeJobsDependentOnStage;
-        jobData <- jobIdToData.get(jobId)
+          jobId <- activeJobsDependentOnStage;
+          jobData <- jobIdToData.get(jobId)
       ) {
         jobData.numActiveTasks -= 1
         taskEnd.reason match {
@@ -431,94 +449,6 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
         }
       }
     }
-
-    var jsonMetrics: JObject = ("" -> "")
-    val totalExecutionTime = info.finishTime - info.launchTime
-    def toProportion(time: Long) = time.toDouble / totalExecutionTime * 100
-    var metricsOpt = Option(taskEnd.taskMetrics)
-    val shuffleReadTime = metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
-    val shuffleReadTimeProportion = toProportion(shuffleReadTime)
-    val shuffleWriteTime = (metricsOpt.map(_.shuffleWriteMetrics.writeTime).getOrElse(0L) / 1e6).toLong
-    val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
-    val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
-    val serializationTimeProportion = toProportion(serializationTime)
-    val deserializationTime = metricsOpt.map(_.executorDeserializeTime).getOrElse(0L)
-    val deserializationTimeProportion = toProportion(deserializationTime)
-    val gettingResultTime = if (info.gettingResult) {
-      if (info.finished) {
-        info.finishTime - info.gettingResultTime
-      } else {
-        0L //currentTime - info.gettingResultTime
-      }
-    } else {
-      0L
-    }
-    val gettingResultTimeProportion = toProportion(gettingResultTime)
-    val executorOverhead = serializationTime + deserializationTime
-    val executorRunTime = metricsOpt.map(_.executorRunTime).getOrElse(totalExecutionTime - executorOverhead - gettingResultTime)
-    val schedulerDelay = math.max(0, totalExecutionTime - executorRunTime - executorOverhead - gettingResultTime)
-    val schedulerDelayProportion = toProportion(schedulerDelay)
-    val executorComputingTime = executorRunTime - shuffleReadTime - shuffleWriteTime
-    val executorComputingTimeProportion =
-      math.max(100 - schedulerDelayProportion - shuffleReadTimeProportion -
-        shuffleWriteTimeProportion - serializationTimeProportion -
-        deserializationTimeProportion - gettingResultTimeProportion, 0)
-
-    val schedulerDelayProportionPos = 0
-    val deserializationTimeProportionPos = schedulerDelayProportionPos + schedulerDelayProportion
-    val shuffleReadTimeProportionPos = deserializationTimeProportionPos + deserializationTimeProportion
-    val executorRuntimeProportionPos = shuffleReadTimeProportionPos + shuffleReadTimeProportion
-    val shuffleWriteTimeProportionPos = executorRuntimeProportionPos + executorComputingTimeProportion
-    val serializationTimeProportionPos = shuffleWriteTimeProportionPos + shuffleWriteTimeProportion
-    val gettingResultTimeProportionPos = serializationTimeProportionPos + serializationTimeProportion
-
-    if (!metricsOpt.isEmpty) {
-      jsonMetrics = ("shuffleReadTime" -> shuffleReadTime) ~
-        ("shuffleWriteTime" -> shuffleWriteTime) ~
-        ("serializationTime" -> serializationTime) ~
-        ("deserializationTime" -> deserializationTime) ~
-        ("gettingResultTime" -> gettingResultTime) ~
-        ("executorComputingTime" -> executorComputingTime) ~
-        ("schedulerDelay" -> schedulerDelay) ~
-        ("shuffleReadTimeProportion" -> shuffleReadTimeProportion) ~
-        ("shuffleWriteTimeProportion" -> shuffleWriteTimeProportion) ~
-        ("serializationTimeProportion" -> serializationTimeProportion) ~
-        ("deserializationTimeProportion" -> deserializationTimeProportion) ~
-        ("gettingResultTimeProportion" -> gettingResultTimeProportion) ~
-        ("executorComputingTimeProportion" -> executorComputingTimeProportion) ~
-        ("schedulerDelayProportion" -> schedulerDelayProportion) ~
-        ("shuffleReadTimeProportionPos" -> shuffleReadTimeProportionPos) ~
-        ("shuffleWriteTimeProportionPos" -> shuffleWriteTimeProportionPos) ~
-        ("serializationTimeProportionPos" -> serializationTimeProportionPos) ~
-        ("deserializationTimeProportionPos" -> deserializationTimeProportionPos) ~
-        ("gettingResultTimeProportionPos" -> gettingResultTimeProportionPos) ~
-        ("executorComputingTimeProportionPos" -> executorRuntimeProportionPos) ~
-        ("schedulerDelayProportionPos" -> schedulerDelayProportionPos) ~
-        ("resultSize" -> metricsOpt.map(_.resultSize).getOrElse(0L)) ~
-        ("jvmGCTime" -> metricsOpt.map(_.jvmGCTime).getOrElse(0L)) ~
-        ("memoryBytesSpilled" -> metricsOpt.map(_.memoryBytesSpilled).getOrElse(0L)) ~
-        ("diskBytesSpilled" -> metricsOpt.map(_.diskBytesSpilled).getOrElse(0L)) ~
-        ("peakExecutionMemory" -> metricsOpt.map(_.peakExecutionMemory).getOrElse(0L)) ~
-        ("test" -> info.gettingResultTime)
-    }
-    val json = ("msgtype" -> "sparkTaskEnd") ~
-      ("launchTime" -> info.launchTime) ~
-      ("finishTime" -> info.finishTime) ~
-      ("taskId" -> info.taskId) ~
-      ("stageId" -> taskEnd.stageId) ~
-      ("taskType" -> taskEnd.taskType) ~
-      ("stageAttemptId" -> taskEnd.stageAttemptId) ~
-      ("index" -> info.index) ~
-      ("attemptNumber" -> info.attemptNumber) ~
-      ("executorId" -> info.executorId) ~
-      ("host" -> info.host) ~
-      ("status" -> info.status) ~
-      ("speculative" -> info.speculative) ~
-      ("errorMessage" -> errorMessage) ~
-      ("metrics" -> jsonMetrics)
-
-    // println("SPARKMONITOR_LISTENER: Task Ended: \n" + pretty(render(json)) + "\n")
-    send(pretty(render(json)))
   }
 
   /** If stored stages data is too large, remove and garbage collect old stages */
@@ -592,55 +522,52 @@ class JupyterSparkMonitorListener(conf: SparkConf) extends SparkListener {
 }
 
 /** Data Structures for storing received from listener events. */
-object UIData {
+/**
+ * Data about a job.
+ *
+ * This is stored to track aggregated valus such as number of stages and tasks, and to track skipped and failed stages
+ */
+class JobUIData(
+  var jobId: Int = -1,
+  var submissionTime: Option[Long] = None,
+  var completionTime: Option[Long] = None,
+  var stageIds: Seq[Int] = Seq.empty,
+  var jobGroup: Option[String] = None,
+  var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN,
+  var numTasks: Int = 0,
+  var numActiveTasks: Int = 0,
+  var numCompletedTasks: Int = 0,
+  var numSkippedTasks: Int = 0,
+  var numFailedTasks: Int = 0,
+  var reasonToNumKilled: Map[String, Int] = Map.empty,
+  var numActiveStages: Int = 0,
+  // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
+  var completedStageIndices: mutable.HashSet[Int] = new mutable.HashSet[Int](),
+  var numSkippedStages: Int = 0,
+  var numFailedStages: Int = 0)
 
-  /**
-   * Data about a job.
-   *
-   * This is stored to track aggregated valus such as number of stages and tasks, and to track skipped and failed stages
-   */
-  class JobUIData(
-    var jobId: Int = -1,
-    var submissionTime: Option[Long] = None,
-    var completionTime: Option[Long] = None,
-    var stageIds: Seq[Int] = Seq.empty,
-    var jobGroup: Option[String] = None,
-    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN,
-    var numTasks: Int = 0,
-    var numActiveTasks: Int = 0,
-    var numCompletedTasks: Int = 0,
-    var numSkippedTasks: Int = 0,
-    var numFailedTasks: Int = 0,
-    var reasonToNumKilled: Map[String, Int] = Map.empty,
-    var numActiveStages: Int = 0,
-    // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
-    var completedStageIndices: mutable.HashSet[Int] = new mutable.HashSet[Int](),
-    var numSkippedStages: Int = 0,
-    var numFailedStages: Int = 0)
+/**
+ * Data about a stage.
+ *
+ * This is stored to track aggregated valus such as number of tasks.
+ */
+class StageUIData {
+  var numActiveTasks: Int = _
+  var numCompleteTasks: Int = _
+  var completedIndices = new HashSet[Int]()
+  var numFailedTasks: Int = _
+  var description: Option[String] = None
+}
 
-  /**
-   * Data about a stage.
-   *
-   * This is stored to track aggregated valus such as number of tasks.
-   */
-  class StageUIData {
-    var numActiveTasks: Int = _
-    var numCompleteTasks: Int = _
-    var completedIndices = new HashSet[Int]()
-    var numFailedTasks: Int = _
-    var description: Option[String] = None
-  }
-  
-  /**
-   * Data about an executor.
-   *
-   * When an executor is removed, its number of cores is not available, so it is looked up here.
-   */
-  class ExecutorData {
-    var numCores: Int = _
-    var executorId: String = _
-    var timeAdded: Long = _
-    var timeRemoved: Long = _
-    var executorHost: String = _
-  }
+/**
+ * Data about an executor.
+ *
+ * When an executor is removed, its number of cores is not available, so it is looked up here.
+ */
+class ExecutorData {
+  var numCores: Int = _
+  var executorId: String = _
+  var timeAdded: Long = _
+  var timeRemoved: Long = _
+  var executorHost: String = _
 }
