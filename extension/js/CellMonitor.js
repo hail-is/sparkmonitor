@@ -77,7 +77,8 @@ function CellMonitor(monitor, cell, appName, appId, sparkUiUrl) {
 CellMonitor.prototype.createDisplay = function () {
     var that = this;
     if (!this.cell.element.find('.CellMonitor').length) {
-        var element = $(WidgetHTML).hide();
+        this.element = $(WidgetHTML).hide();
+        var element = this.element;
         this.displayElement = element;
         this.cell.element.find('.inner_cell').append(element);
         element.find('.appname').text(this.appName);
@@ -93,21 +94,7 @@ CellMonitor.prototype.createDisplay = function () {
 
         element.find('.sparkuitabbutton').click(function () { window.open(that.getSparkUI('/jobs')); });
         element.find('.titlecollapse').click(function () {
-            if (that.view != "hidden") {
-                that.lastview = that.view;
-                that.hideView(that.view);
-                that.view = "hidden";
-                that.cell.element.find('.content').slideUp({
-                    queue: false, duration: 400,
-                    complete: function () {
-                        that.cell.element.find('.headericon').addClass('headericoncollapsed');
-                        element.find('.tabcontent').removeClass('tabcontentactive');
-                        element.find('.tabbutton').removeClass('tabbuttonactive');
-                    }
-                });
-            } else {
-                that.showView(that.lastview);
-            }
+            that.minimize(element);
         });
         if (!this.taskchart) element.find('.taskviewtabbutton').hide();
         element.find('.taskviewtabbutton').click(function () {
@@ -119,6 +106,30 @@ CellMonitor.prototype.createDisplay = function () {
         this.showView("jobs");
     }
     else console.error("SparkMonitor: Error Display Already Exists");
+}
+
+
+/**
+ * Minimizes the displayed widget.
+ */
+CellMonitor.prototype.minimize = function () {
+    if (this.view != "hidden") {
+        this.lastview = this.view;
+        this.hideView(this.view);
+        this.view = "hidden";
+
+        var that = this;
+        this.cell.element.find('.content').slideUp({
+            queue: false, duration: 400,
+            complete: function () {
+                that.cell.element.find('.headericon').addClass('headericoncollapsed');
+                that.element.find('.tabcontent').removeClass('tabcontentactive');
+                that.element.find('.tabbutton').removeClass('tabbuttonactive');
+            }
+        });
+    } else {
+        this.showView(this.lastview);
+    }
 }
 
 /** Remove the display from a cell. */
@@ -545,6 +556,7 @@ CellMonitor.prototype.onSparkJobEnd = function (data) {
     if (this.numActiveJobs == 0 && this.cellcompleted && !this.allcompleted) {
         this.onAllCompleted();
     }
+    this.minimize();
 }
 
 /** Called when a Spark stage is submitted. */
