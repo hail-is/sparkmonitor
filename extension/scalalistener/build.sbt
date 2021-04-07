@@ -6,7 +6,7 @@ scalaVersion := "2.12.4"
 
 organization := "cern"
 
-val sparkVersion = "3.0.1"
+val sparkVersion = "3.1.1"
 
 libraryDependencies ++= List(
   "org.apache.spark" %% "spark-core" % sparkVersion,
